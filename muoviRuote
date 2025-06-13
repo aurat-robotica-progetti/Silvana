@@ -4,7 +4,6 @@
 #include <utility/imumaths.h>
 #include <Adafruit_PWMServoDriver.h>
 
-Adafruit_PWMServoDriver servo = Adafruit_PWMServoDriver();
 
 #define dir_DX 44
 #define vel_DX 2
@@ -21,6 +20,8 @@ volatile long encoder1Count = 0;
 
 int cmTarget=100, tickTarget=(1000 * cmTarget) / 22;
 
+Adafruit_PWMServoDriver servo = Adafruit_PWMServoDriver();
+
 //information for the use of servos 
 #define SERVOMIN 120
 #define SERVOMAX 470
@@ -35,20 +36,18 @@ int gradi_servo[13] = {0, 0, 0, 0, 0, 0, 0, 0, 90, 90, 90, 90, 90}; //array with
 #define WRIST 11
 #define HAND 12
 
-//Servo telecamera
-#define CAM 13
-
 // Define the start configuration of the joints
 #define BASE_START 90 //10 170
-#define SHOULDER_START 5 //80 170
+#define SHOULDER_START 95 //80 170
 #define ELBOW_START 20 //40 18c0
 #define WRIST_START 50 //100 180
-#define HAND_START 40 //10aperto 65chiuso
-#define CAM_START 180
+#define HAND_START 180 //10aperto 65chiuso
+#define CAM_START 50
 
 #define DELAY_REACH_GOAL 20
-int pos1[5] = {BASE_START, SHOULDER_START, ELBOW_START, WRIST_START, HAND_START}; // rimetti in ordine
 
+//declaration of the starting posiiton of the robot (starting degrees of each servo in order to get a standing position of the robot)
+int pos1[13] = {35, 27, 25, 25, 50, 125, 48, 134, BASE_START, SHOULDER_START, ELBOW_START, WRIST_START, HAND_START}; // rimetti in ordine
 
 float yaw;
 sensors_event_t orientationData;
@@ -59,23 +58,44 @@ char move;
 
 int fatto, quanto, lettura, offset, val;
 
+
+/*
+void posizione_camminata(){
+  reach_goal(FOTOCAM, 160);
+  reach_goal(base, 90);
+  reach_goal(shoulder, 5); //105
+  reach_goal(GOMITO, 0); //90
+  reach_goal(POLSO, 90); //90
+}*/
+
+void posizione_braccio(){
+  //reach_goal(CAM, 160, DELAY_REACH_GOAL);
+  reach_goal(BASE, 0, DELAY_REACH_GOAL);
+  reach_goal(SHOULDER, 95, DELAY_REACH_GOAL); //105
+  reach_goal(ELBOW, 0, DELAY_REACH_GOAL); //90
+  reach_goal(WRIST, 90, DELAY_REACH_GOAL); //90
+}
+
+void posizione_camminata(){
+  reach_goal(BASE, BASE_START, DELAY_REACH_GOAL);
+  reach_goal(SHOULDER, SHOULDER_START, DELAY_REACH_GOAL);
+  reach_goal(ELBOW, ELBOW_START, DELAY_REACH_GOAL);
+  reach_goal(WRIST, WRIST_START, DELAY_REACH_GOAL);
+  reach_goal(HAND, HAND_START, DELAY_REACH_GOAL);
+  //reach_goal(CAM, 160, 100);
+}
+void giro(){
+  
+  bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
+  yaw = orientationData.orientation.x; // Yaw (orientazione sull'asse z)
+  delay(BNO055_SAMPLERATE_DELAY_MS);
+}
+
 //read the current position of a specified servo
 int leggi_servo(int motore){
   return gradi_servo[motore];
 }
 
-//moves a specified servo to a specified position
-void muovi(int motore, int pos) {
-  int posizione = map(pos, 0, 180, SERVOMIN, SERVOMAX);
-  servo.setPWM(motore, 0, posizione);
-  gradi_servo[motore] = pos;
-}
-
-/*
- * This function moves a given servo smoothly from a given start position to a given end position.
- * The movement can be both clockwise or counterclockwise BASEd on the values assigned to
- * the start position and end position
- */
 //moves a specified servo to a specified position in a controlled and fluid way
 void reach_goal(int motore, int goal, int speed_servo){
   if(goal>=leggi_servo(motore)){
@@ -93,32 +113,27 @@ void reach_goal(int motore, int goal, int speed_servo){
   }
 }
 
-void posizione_camminata(){
-  reach_goal(CAM, 160, DELAY_REACH_GOAL);
-  reach_goal(BASE, 90, DELAY_REACH_GOAL);
-  reach_goal(SHOULDER, 5, DELAY_REACH_GOAL); //105
-  reach_goal(ELBOW, 0, DELAY_REACH_GOAL); //90
-  reach_goal(WRIST, 90, DELAY_REACH_GOAL); //90
+//moves a specified servo to a specified position
+void muovi(int motore, int pos) {
+  int posizione = map(pos, 0, 180, SERVOMIN, SERVOMAX);
+  servo.setPWM(motore, 0, posizione);
+  gradi_servo[motore] = pos;
 }
 
-void posizione_braccio(){
-  reach_goal(CAM, 160, DELAY_REACH_GOAL);
-  reach_goal(BASE, 0, DELAY_REACH_GOAL);
-  reach_goal(SHOULDER, 5, DELAY_REACH_GOAL); //105
-  reach_goal(ELBOW, 0, DELAY_REACH_GOAL); //90
-  reach_goal(WRIST, 90, DELAY_REACH_GOAL); //90
+void posizioneIniziale() {
+  for (int i = 0; i < sizeof(gradi_servo) / sizeof(gradi_servo[0]); i++) {  //each servo reachs its starting position 
+    muovi(i, pos1[i]);
+  }
 }
-void giro(){
-  
-  bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-  yaw = orientationData.orientation.x; // Yaw (orientazione sull'asse z)
-  delay(BNO055_SAMPLERATE_DELAY_MS);
-}
-
 
 void setup() {
   Serial.flush();
   Serial.begin(115200);
+
+  servo.begin();
+  servo.setOscillatorFrequency(27000000);  // Frequenza dell'oscillatore interna
+  servo.setPWMFreq(SERVO_FREQ);            // Imposta la frequenza del segnale PWM
+
   //Serial.println("iniziosetup");
   // Set motor control pins as output
   pinMode(vel_DX, OUTPUT);
@@ -137,23 +152,40 @@ void setup() {
     Serial.print("Errore: BNO055 non rilevato.");
     while (1);
   }
-  delay(1000);
   
-  //BASE.write(BASE_START); //min 0 a destra, max 180 a sinitra
-  //SHOULDER.write(SHOULDER_START); //min sotto, max alto
-  //ELBOW.write(ELBOW_START); // ELBOW = min 0 basso, max 180 alto
-  //WRIST.write(WRIST_START); //POL = min 0 basso, max 180 alto
-  //HAND.write(HAND_start); // PI = min 0 aperto, max 180 chiuso (da sistemare lo zero)
-  //CAM.write(CAM_start); // PI = min 0 aperto, max 180 chiuso (da sistemare lo zero)
+  //base.write(BASE_START); //min 0 a destra, max 180 a sinitra
+  //shoulder.write(SHOULDER_START); //min sotto, max alto
+  //GOMITO.write(GOMITO_START); // GOMITO = min 0 basso, max 180 alto
+  //POLSO.write(POLSO_START); //POL = min 0 basso, max 180 alto
+  //MANO.write(MANO_start); // PI = min 0 aperto, max 180 chiuso (da sistemare lo zero)
+  //FOTOCAM.write(FOTOCAM_start); // PI = min 0 aperto, max 180 chiuso (da sistemare lo zero)
   
   //Serial.println("fine");
+  /*
+  TEST
+  muovi(BASE, 45);
+  delay(1000);
+  muovi(SHOULDER, 45);
+  delay(1000);
+  muovi(ELBOW, 45);
+  delay(1000);
+  muovi(WRIST, 45);
+  reach_goal(BASE, 180, DELAY_REACH_GOAL);
+  reach_goal(BASE, 0, DELAY_REACH_GOAL);
+  */
+  posizioneIniziale();
+  delay(1000);
   posizione_camminata();
+  
+
+  
   //posizione_braccio();
   Serial.setTimeout(1);
 }
 
 
 void loop() {
+ 
   if (Serial.available())
   {
     char chr = Serial.read();
@@ -174,12 +206,12 @@ void loop() {
     if(chr == 'k'){
       idx = -1;
       val_idx = 0;
-      posizione_camminata();
+      //posizione_camminata();
     }
      if(chr == 'l'){
       idx = -1;
       val_idx = 0;
-      posizione_braccio();
+      //posizione_braccio();
     }
   if(chr == 'W') //avanti forte
     {
@@ -201,32 +233,32 @@ void loop() {
     }
 
     
-    // BASE motor
+    // base motor
     if(chr == 'b')
     {
       idx = 0;
       val_idx = 0;
     }
-    // SHOULDER motor
+    // shoulder motor
     else if(chr == 'v')
     {
       idx = 1;
       val_idx = 0;
     }
-    // ELBOW motor
+    // GOMITO motor
     else if(chr == 'c')
     {
       idx = 2;
       val_idx = 0;
     }
-    // WRIST motor
+    // POLSO motor
     else if(chr == 'x')
     {
       idx = 3;
       val_idx = 0;
     }
     
-    // HAND motor
+    // MANO motor
     else if(chr == 'z')
     {
       idx = 4;
@@ -320,29 +352,29 @@ void loop() {
       
       else if(idx == 0)
       {
-        reach_goal(BASE, val, DELAY_REACH_GOAL);
+        //reach_goal(base, val);
       }
       else if(idx == 1)
       {
         
-        reach_goal(SHOULDER, map(val,90,180,20 ,115), DELAY_REACH_GOAL); // 90 dritto 180 su
+        //reach_goal(shoulder, map(val,90,180,20 ,115)); // 90 dritto 180 su
       }
       else if(idx == 2)
       { 
 
-        reach_goal(ELBOW, val, DELAY_REACH_GOAL);
+        //reach_goal(GOMITO, val);
       }
       else if(idx == 3)
       { 
-        reach_goal(WRIST, map(val,0,180,30,150), DELAY_REACH_GOAL); //0 giu 180 su
+        //reach_goal(POLSO, map(val,0,180,30,150)); //0 giu 180 su
       }
       else if(idx == 4)
       {
-        reach_goal(HAND, map(val,0,90,50,120), DELAY_REACH_GOAL); //0 aperto 90 chiuso
+        //reach_goal(MANO, map(val,0,90,50,120)); //0 aperto 90 chiuso
       }
       else if(idx == 7)
       { 
-        reach_goal(CAM, map(val,90,180,160,180), DELAY_REACH_GOAL); //90 orizontale 180 45 gradi in su
+        //reach_goal(FOTOCAM, map(val,90,180,160,180)); //90 orizontale 180 45 gradi in su
       }
       
       else if(idx == 5)
@@ -356,13 +388,14 @@ void loop() {
       else if(idx == 6)
       {
        
-        turnRight(val);
+       turnRight(val);
        
         giro();
         Serial.print("Yaw:");
         Serial.println(yaw);
         
       }
+
 
       // reset the angle
       value[0] = '0';
@@ -382,7 +415,8 @@ void loop() {
  void leggiEncoder() {
   if (digitalRead(Encoder1Signal2) ==HIGH) 
     encoder1Count++;  // Rotazione in avanti
-
+  
+  
 }
 
 void turnLeft(int gradii) {
@@ -399,6 +433,7 @@ void turnLeft(int gradii) {
       gradiFatti=(360-(lettura-gradoIniziale))%360;
   }
   stopMotors();
+    
 }
 
 void turnRight(int gradii) {
@@ -416,13 +451,16 @@ void turnRight(int gradii) {
       gradiFatti=gradiFatti%360;
   }
   stopMotors();
+  
 }
 
 void moveForward() {
+
   digitalWrite(dir_DX,0);
   digitalWrite(dir_SX,0);
   analogWrite(vel_DX,vel_mot);
   analogWrite(vel_SX,vel_mot);
+
 }
 
 void moveBackward() {
@@ -430,23 +468,28 @@ void moveBackward() {
   digitalWrite(dir_SX,1);
   analogWrite(vel_DX,vel_mot);
   analogWrite(vel_SX,vel_mot);
+
 }
 
 void moveLeft(){
+
   digitalWrite(dir_DX,0);
   digitalWrite(dir_SX,1);
   analogWrite(vel_DX,vel_mot);
   analogWrite(vel_SX,vel_mot);
-}
 
+}
 void moveRight(){
+
   digitalWrite(dir_DX,1);
   digitalWrite(dir_SX,0);
   analogWrite(vel_DX,vel_mot);
   analogWrite(vel_SX,vel_mot);
+
 }
 
 void stopMotors() {
   analogWrite(vel_DX,0);
   analogWrite(vel_SX,0);
+
 }
